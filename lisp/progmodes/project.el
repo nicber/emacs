@@ -88,7 +88,6 @@
 ;;; Code:
 
 (require 'cl-generic)
-(require 'seq)
 (eval-when-compile (require 'subr-x))
 
 (defvar project-find-functions (list #'project-try-vc)
@@ -743,13 +742,13 @@ the choice in the dispatch menu.")
 
 (defun project--keymap-prompt ()
   "Return a prompt for the project swithing dispatch menu."
-  (string-trim
-   (seq-mapcat
-    (pcase-lambda (`(,key ,label))
-      (format "[%s] %s  "
-              (propertize (key-description `(,key)) 'face 'bold)
-              label))
-    project-switch-menu 'string)))
+  (mapconcat
+   (pcase-lambda (`(,key ,label))
+     (format "[%s] %s"
+             (propertize (key-description `(,key)) 'face 'bold)
+             label))
+   project-switch-menu
+   "  "))
 
 ;;;###autoload
 (defun project-switch-project ()
