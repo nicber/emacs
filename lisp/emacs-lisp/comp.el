@@ -2407,6 +2407,22 @@ processes from `comp-async-compilations'"
                           2))))
     comp-async-jobs-number))
 
+(defvar comp-gcc-path nil)
+
+(defun comp-add-gcc-to-path ()
+  (if (or (null comp-gcc-path)
+          (string-empty-p comp-gcc-path)
+          (not (file-directory-p comp-gcc-path)))
+      process-environment
+    (let (result)
+      (dolist (item process-environment result)
+        (if (not (string-prefix-p "PATH=" item))
+            (push item result)
+          (push (replace-regexp-in-string
+                 (regexp-quote "PATH=")
+                 (concat "PATH=" comp-gcc-path path-separator)
+                 item t 'literal) result))))))
+
 (defun comp-run-async-workers ()
   "Start compiling files from `comp-files-queue' asynchronously.
 When compilation is finished, run `comp-async-all-done-hook' and
@@ -2440,6 +2456,7 @@ display a message."
                                (concat "emacs-async-comp-"
                                        (file-name-base source-file) "-")
                                nil ".el" (prin1-to-string expr)))
+                   (process-environment (comp-add-gcc-to-path))
                    (load1 load)
                    (process (make-process
                              :name (concat "Compiling: " source-file)
