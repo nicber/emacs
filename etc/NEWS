@@ -221,6 +221,21 @@ key             binding
 / v             package-menu-filter-by-version
 / /             package-menu-filter-clear
 
+** Project
+
+*** Previously used project directories are now are now completed by
+all commands that prompt for a project directory.
+
++++
+*** New commands 'project-dired' and 'project-eshell'.
+These commands run Dired and Eshell in a project's root directory,
+respectively.
+
++++
+*** New command 'project-switch-project'.
+This command lets you "switch" to another project by running a project
+command chosen from a dispatch menu.
+
 ** gdb-mi
 
 +++
