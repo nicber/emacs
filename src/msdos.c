@@ -3350,7 +3350,7 @@ getdefdir (int drive, char *dst)
 }
 
 char *
-emacs_root_dir (void)
+dos_emacs_root_dir (void)
 {
   static char root_dir[4];
 

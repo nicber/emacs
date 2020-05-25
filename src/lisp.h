@@ -4746,10 +4746,13 @@ extern bool profiler_memory_running;
 extern void malloc_probe (size_t);
 extern void syms_of_profiler (void);
 
-#ifdef DOS_NT
-/* Defined in msdos.c, w32.c.  */
-extern char *emacs_root_dir (void);
-#endif /* DOS_NT */
+#ifdef MSDOS
+/* Defined in msdos.c.  */
+extern char *dos_emacs_root_dir (void);
+#elif defined (WINDOWSNT)
+/* Defined in w32.c.  */
+extern char *w32_emacs_root_dir (void);
+#endif /* MSDOS */
 
 #ifdef HAVE_NATIVE_COMP
 INLINE bool
