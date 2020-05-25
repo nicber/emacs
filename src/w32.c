@@ -3147,7 +3147,7 @@ init_environment (char ** argv)
 /* Called from expand-file-name when default-directory is not a string.  */
 
 char *
-emacs_root_dir (void)
+w32_emacs_root_dir (void)
 {
   static char root_dir[MAX_UTF8_PATH];
   const char *p;

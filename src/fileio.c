@@ -781,6 +781,30 @@ user_homedir (char const *name)
   return pw->pw_dir;
 }
 
+/* As a last resort, we may have to use the root as
+   default_directory in `expand-file-name'.
+
+   "/" is not considered a root directory on DOS_NT, so using it
+   as default_directory causes an infinite recursion in, e.g.,
+   the following:
+
+   (let (default-directory)
+          (expand-file-name "a"))
+
+   To avoid this, we use the root of the current drive. */
+
+static Lisp_Object
+emacs_root_dir (void)
+{
+#ifdef DOS
+  return build_string (dos_emacs_root_dir ());
+#elif defined (WINDOWSNT)
+  return build_string (w32_emacs_root_dir ());
+#else
+  return build_string ("/");
+#endif
+}
+
 DEFUN ("expand-file-name", Fexpand_file_name, Sexpand_file_name, 1, 2, 0,
        doc: /* Convert filename NAME to absolute, and canonicalize it.
 Second arg DEFAULT-DIRECTORY is directory to start with if NAME is relative
@@ -850,23 +874,6 @@ the root directory.  */)
       error ("Invalid handler in `file-name-handler-alist'");
     }
 
-  /* As a last resort, we may have to use the root as
-     default_directory below.  */
-  Lisp_Object root;
-#ifdef DOS_NT
-      /* "/" is not considered a root directory on DOS_NT, so using it
-	 as default_directory causes an infinite recursion in, e.g.,
-	 the following:
-
-            (let (default-directory)
-	      (expand-file-name "a"))
-
-	 To avoid this, we use the root of the current drive.  */
-      root = build_string (emacs_root_dir ());
-#else
-      root = build_string ("/");
-#endif
-
   /* Use the buffer's default-directory if DEFAULT_DIRECTORY is omitted.  */
   if (NILP (default_directory))
     {
@@ -891,13 +898,13 @@ the root directory.  */)
 	      Lisp_Object absdir
 		= STRINGP (Vinvocation_directory)
 		&& file_name_absolute_no_tilde_p (Vinvocation_directory)
-		? Vinvocation_directory : root;
+		? Vinvocation_directory : emacs_root_dir ();
 	      default_directory = Fexpand_file_name (dir, absdir);
 	    }
 	}
     }
   if (! STRINGP (default_directory))
-    default_directory = root;
+    default_directory = emacs_root_dir ();
 
   handler = Ffind_file_name_handler (default_directory, Qexpand_file_name);
   if (!NILP (handler))
