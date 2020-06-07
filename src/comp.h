@@ -101,6 +101,11 @@ extern void dispose_all_remaining_comp_units (void);
 
 extern void clean_package_user_dir_of_old_comp_units (void);
 
+#ifdef WINDOWSNT
+extern void
+register_native_comp_unit (struct Lisp_Native_Comp_Unit * comp_unit);
+#endif
+
 #else /* #ifdef HAVE_NATIVE_COMP */
 
 static inline void

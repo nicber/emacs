@@ -4764,8 +4764,13 @@ SUBR_NATIVE_COMPILEDP (Lisp_Object a)
 INLINE struct Lisp_Native_Comp_Unit *
 allocate_native_comp_unit (void)
 {
-  return ALLOCATE_ZEROED_PSEUDOVECTOR (struct Lisp_Native_Comp_Unit,
-				       data_impure_vec, PVEC_NATIVE_COMP_UNIT);
+  struct Lisp_Native_Comp_Unit * comp_u
+    = ALLOCATE_ZEROED_PSEUDOVECTOR (struct Lisp_Native_Comp_Unit,
+                                    data_impure_vec, PVEC_NATIVE_COMP_UNIT);
+#ifdef WINDOWSNT
+  register_native_comp_unit (comp_u);
+#endif
+  return comp_u;
 }
 #else
 INLINE bool

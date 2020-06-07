@@ -4111,17 +4111,17 @@ helper_PSEUDOVECTOR_TYPEP_XUNTAG (Lisp_Object a, enum pvec_type code)
 
   There are two data structures used:
 
-  - The `all_loaded_comp_units_h` hashtable.
+  - The `all_loaded_comp_units` list.
 
-  This hashtable is used like an array of weak references to native
-  compilation units.  This hash table is filled by load_comp_unit ()
-  and dispose_all_remaining_comp_units () iterates over all values
-  that were not disposed by the GC and performs all disposal steps
-  when Emacs is closing.
+  This list is filled by allocate_native_comp_unit () and
+  dispose_all_remaining_comp_units () iterates over all values that
+  remain and performs all disposal steps when Emacs is closing. The
+  dispose_comp_unit () function removes entries that were disposed by
+  the GC.
 
   - The `delayed_comp_unit_disposal_list` list.
 
-  This is were the dispose_comp_unit () function, when called by the
+  This is where the dispose_comp_unit () function, when called by the
   GC sweep stage, stores the original filenames of the disposed native
   compilation units.  This is an ad-hoc C structure instead of a Lisp
   cons because we need to allocate instances of this structure during
@@ -4136,7 +4136,35 @@ helper_PSEUDOVECTOR_TYPEP_XUNTAG (Lisp_Object a, enum pvec_type code)
 #ifdef WINDOWSNT
 #define OLD_ELN_SUFFIX_REGEXP build_string ("\\.eln\\.old\\'")
 
-static Lisp_Object all_loaded_comp_units_h;
+struct all_loaded_comp_units_s {
+  struct Lisp_Native_Comp_Unit **mem;
+  size_t size;
+  size_t capacity;
+};
+
+static struct all_loaded_comp_units_s all_loaded_comp_units;
+
+static void
+loaded_comp_units_remove (struct Lisp_Native_Comp_Unit * comp_u)
+{
+  size_t i;
+  bool found = false;
+  for (i = 0 ; i < all_loaded_comp_units.size; ++i)
+    if (all_loaded_comp_units.mem[i] == comp_u)
+      {
+        found = true;
+        break;
+      }
+  if (!found)
+    emacs_abort ();
+
+  size_t elements_on_right = all_loaded_comp_units.size - i - 1;
+  memmove (&all_loaded_comp_units.mem[i],
+           &all_loaded_comp_units.mem[i + 1],
+           elements_on_right * sizeof (struct Lisp_Native_Comp_Unit *));
+
+  all_loaded_comp_units.mem[--all_loaded_comp_units.size] = NULL;
+}
 
 /* We need to allocate instances of this struct during a GC sweep.
    This is why it can't be transformed into a simple cons.  */
@@ -4193,17 +4221,9 @@ clean_package_user_dir_of_old_comp_units (void)
 void
 dispose_all_remaining_comp_units (void)
 {
-  struct Lisp_Hash_Table *h = XHASH_TABLE (all_loaded_comp_units_h);
-
-  for (ptrdiff_t i = 0; i < HASH_TABLE_SIZE (h); ++i)
+  for (ptrdiff_t i = all_loaded_comp_units.size - 1; i >= 0; --i)
     {
-      Lisp_Object k = HASH_KEY (h, i);
-      if (!EQ (k, Qunbound))
-        {
-          Lisp_Object val = HASH_VALUE (h, i);
-          struct Lisp_Native_Comp_Unit *cu = XNATIVE_COMP_UNIT (val);
-          dispose_comp_unit (cu, false);
-        }
+      dispose_comp_unit (all_loaded_comp_units.mem[i], false);
     }
 }
 
@@ -4227,22 +4247,25 @@ finish_delayed_disposal_of_comp_units (void)
       xfree (item);
     }
 }
-#endif
 
 /* This function puts the compilation unit in the
-  `all_loaded_comp_units_h` hashmap.  */
-static void
-register_native_comp_unit (Lisp_Object comp_u)
+  `all_loaded_comp_units` list.  */
+void
+register_native_comp_unit (struct Lisp_Native_Comp_Unit * comp_u)
 {
-#ifdef WINDOWSNT
-  /* We have to do this since we can't use `gensym'. This function is
-     called early when loading a dump file and subr.el may not have
-     been loaded yet.  */
-  static intmax_t count;
+  /*  Grow the array if necessary. */
+  if (all_loaded_comp_units.size + 1 > all_loaded_comp_units.capacity)
+    {
+      all_loaded_comp_units.capacity = max (1, 2*all_loaded_comp_units.capacity);
+      all_loaded_comp_units.mem
+        = xrealloc (all_loaded_comp_units.mem,
+                    all_loaded_comp_units.capacity
+                    * sizeof (struct Lisp_Native_Comp_Unit *));
+    }
 
-  Fputhash (make_int (count++), comp_u, all_loaded_comp_units_h);
-#endif
+  all_loaded_comp_units.mem[all_loaded_comp_units.size++] = comp_u;
 }
+#endif
 
 /* This function disposes compilation units.  It is called during the GC sweep
    stage and when Emacs is closing.
@@ -4257,6 +4280,7 @@ dispose_comp_unit (struct Lisp_Native_Comp_Unit *comp_handle, bool delay)
   eassert (comp_handle->handle);
   dynlib_close (comp_handle->handle);
 #ifdef WINDOWSNT
+  loaded_comp_units_remove (comp_handle);
   if (!delay)
     {
       Lisp_Object dirname = internal_condition_case_1 (
@@ -4501,12 +4525,6 @@ load_comp_unit (struct Lisp_Native_Comp_Unit *comp_u, bool loading_dump,
       d_vec_len = XFIXNUM (Flength (comp_u->data_impure_vec));
       for (EMACS_INT i = 0; i < d_vec_len; i++)
 	data_imp_relocs[i] = AREF (comp_u->data_impure_vec, i);
-
-      /* If we register them while dumping we will get some entries in
-	 the hash table that will be duplicated when pdumper calls
-	 load_comp_unit.  */
-      if (!will_dump_p ())
-	register_native_comp_unit (comp_u_lisp_obj);
     }
 
   if (!loading_dump)
@@ -4817,11 +4835,6 @@ syms_of_comp (void)
   comp.emitter_dispatcher = Qnil;
   staticpro (&delayed_sources);
   delayed_sources = Qnil;
-
-#ifdef WINDOWSNT
-  staticpro (&all_loaded_comp_units_h);
-  all_loaded_comp_units_h = CALLN (Fmake_hash_table, QCweakness, Qvalue);
-#endif
 
   DEFVAR_LISP ("comp-ctxt", Vcomp_ctxt,
 	       doc: /* The compiler context.  */);
